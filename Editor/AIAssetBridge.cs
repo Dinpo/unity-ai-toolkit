@@ -517,7 +517,15 @@ namespace AIToolkit
                 job.Errors.Add("Import timed out");
             }
 
-            UnityEditor.AssetDatabase.Refresh(UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+            if (UnityEditor.EditorApplication.isPlaying)
+            {
+                Debug.LogWarning("[AIToolkit] ImportAndWait: skipping AssetDatabase.Refresh during Play Mode. " +
+                    "Newly imported assets will not be visible or usable until domain is refreshed in Edit Mode.");
+            }
+            else
+            {
+                UnityEditor.AssetDatabase.Refresh(UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+            }
 
             // Measure bounds for each imported prefab
             var sb = new StringBuilder();
