@@ -29,6 +29,15 @@ public static class AIT
     public static string GetPreviewPath(int assetFileId)
         => AIToolkit.AIAssetBridge.GetPreviewPath(assetFileId);
 
+    public static string GetBounds(string[] prefabPaths)
+        => AIToolkit.AIAssetBridge.GetBounds(prefabPaths);
+
+    public static string ImportAndWait(int[] assetFileIds, string targetFolder = "Assets/ThirdParty")
+        => AIToolkit.AIAssetBridge.ImportAndWait(assetFileIds, targetFolder);
+
+    public static string InspectPrefab(string prefabPath)
+        => AIToolkit.AIAssetBridge.InspectPrefab(prefabPath);
+
     public static string StartDownload(int assetId)
         => AIToolkit.AIAssetBridge.StartDownload(assetId);
 
