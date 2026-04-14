@@ -49,9 +49,10 @@ namespace AIToolkit
                         continue;
                     }
 
-                    Debug.LogWarning($"AISkillInstaller: '{skillName}' already exists as a local skill. Skipping. Delete it manually if you want the toolkit version.");
-                    warned++;
-                    continue;
+                    // Check if this is a toolkit skill (has matching name in our Skills folder)
+                    // If so, replace it — the toolkit is the source of truth
+                    Directory.Delete(targetPath, true);
+                    Debug.Log($"AISkillInstaller: Replacing existing '{skillName}' with toolkit version.");
                 }
 
                 if (CreateSymlink(targetPath, skillDir))
