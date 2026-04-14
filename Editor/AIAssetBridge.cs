@@ -564,8 +564,8 @@ namespace AIToolkit
         }
 
         /// <summary>
-        /// Inspect an imported prefab: get bounds + 4-angle contact sheet with gizmos and XYZ axis.
-        /// Temporarily instantiates the prefab, captures from 4 angles via SceneView, destroys it.
+        /// Inspect an imported prefab: get bounds + 4-angle contact sheet.
+        /// Temporarily instantiates the prefab and a camera, captures from 4 angles, destroys both.
         /// </summary>
         public static string InspectPrefab(string prefabPath)
         {
@@ -574,31 +574,29 @@ namespace AIToolkit
             var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             if (prefab == null) return $"{{\"error\":\"Prefab not found at {prefabPath}\"}}";
 
-            var instance = UnityEngine.Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
+            // Instantiate far from scene origin to avoid interference
+            var instance = UnityEngine.Object.Instantiate(prefab, new Vector3(0, -500, 0), Quaternion.identity);
+
+            // Create a temporary camera for rendering
+            var camGo = new GameObject("_AIToolkit_InspectCam");
+            var cam = camGo.AddComponent<Camera>();
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.2f, 0.2f, 0.2f);
+            cam.nearClipPlane = 0.1f;
+            cam.farClipPlane = 500f;
+            cam.fieldOfView = 40f;
+
             try
             {
                 var bounds = GetCombinedBounds(instance);
-                UnityEditor.Selection.activeGameObject = instance;
+                // Bounds center is relative to instance position, adjust to world
+                Vector3 worldCenter = instance.transform.position + bounds.center;
 
-                var sceneView = UnityEditor.SceneView.lastActiveSceneView;
-                if (sceneView == null)
-                    sceneView = UnityEditor.EditorWindow.GetWindow<UnityEditor.SceneView>();
+                float distance = Mathf.Max(bounds.size.magnitude * 1.2f, 5f);
 
-                if (sceneView == null)
-                    return $"{{\"prefabPath\":{JsonStr(prefabPath)},\"bounds\":{BoundsToJson(bounds)},\"error\":\"No SceneView available\"}}";
-
-                sceneView.drawGizmos = true;
-
-                float distance = Mathf.Max(bounds.size.magnitude * 1.5f, 5f);
-                Vector3 center = bounds.center;
-
-                float[][] angles = new float[][] {
-                    new float[] { 20f, 0f },
-                    new float[] { 20f, 90f },
-                    new float[] { 20f, 180f },
-                    new float[] { 20f, 270f }
-                };
                 string[] labels = new string[] { "front_Z+", "right_X+", "back_Z-", "left_X-" };
+                float[] azimuths = new float[] { 0f, 90f, 180f, 270f };
+                float elevation = 25f;
 
                 string screenshotDir = System.IO.Path.Combine(Application.dataPath, "Screenshots", "Inspect");
                 System.IO.Directory.CreateDirectory(screenshotDir);
@@ -606,48 +604,42 @@ namespace AIToolkit
                 string prefabName = System.IO.Path.GetFileNameWithoutExtension(prefabPath);
                 var shotPaths = new List<string>();
 
-                for (int i = 0; i < angles.Length; i++)
-                {
-                    float elevation = angles[i][0];
-                    float azimuth = angles[i][1];
+                int width = 512;
+                int height = 512;
+                var rt = new RenderTexture(width, height, 24);
 
+                for (int i = 0; i < azimuths.Length; i++)
+                {
                     float elevRad = elevation * Mathf.Deg2Rad;
-                    float azimRad = azimuth * Mathf.Deg2Rad;
+                    float azimRad = azimuths[i] * Mathf.Deg2Rad;
                     Vector3 offset = new Vector3(
                         Mathf.Sin(azimRad) * Mathf.Cos(elevRad),
                         Mathf.Sin(elevRad),
                         Mathf.Cos(azimRad) * Mathf.Cos(elevRad)
                     ) * distance;
 
-                    Vector3 camPos = center + offset;
-                    Quaternion camRot = Quaternion.LookRotation(center - camPos);
-                    sceneView.LookAt(center, camRot, distance);
-                    sceneView.Repaint();
+                    camGo.transform.position = worldCenter + offset;
+                    camGo.transform.LookAt(worldCenter);
+
+                    cam.targetTexture = rt;
+                    cam.Render();
+
+                    RenderTexture.active = rt;
+                    var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+                    tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                    tex.Apply();
 
                     string shotPath = System.IO.Path.Combine(screenshotDir, $"{prefabName}_{labels[i]}.png");
-                    var cam = sceneView.camera;
-                    if (cam != null)
-                    {
-                        int width = 512;
-                        int height = 512;
-                        var rt = new RenderTexture(width, height, 24);
-                        cam.targetTexture = rt;
-                        cam.Render();
+                    System.IO.File.WriteAllBytes(shotPath, tex.EncodeToPNG());
+                    shotPaths.Add(shotPath);
 
-                        RenderTexture.active = rt;
-                        var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
-                        tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-                        tex.Apply();
-
-                        System.IO.File.WriteAllBytes(shotPath, tex.EncodeToPNG());
-                        shotPaths.Add(shotPath);
-
-                        cam.targetTexture = null;
-                        RenderTexture.active = null;
-                        UnityEngine.Object.DestroyImmediate(rt);
-                        UnityEngine.Object.DestroyImmediate(tex);
-                    }
+                    RenderTexture.active = null;
+                    UnityEngine.Object.DestroyImmediate(tex);
                 }
+
+                cam.targetTexture = null;
+                RenderTexture.active = null;
+                UnityEngine.Object.DestroyImmediate(rt);
 
                 string contactSheetPath = null;
                 if (shotPaths.Count == 4)
@@ -673,6 +665,7 @@ namespace AIToolkit
             finally
             {
                 UnityEngine.Object.DestroyImmediate(instance);
+                UnityEngine.Object.DestroyImmediate(camGo);
             }
         }
 
