@@ -44,6 +44,15 @@ return AIT.GetPreviewPath(48291);
 return AIT.StartDownload(1027);
 return AIT.GetDownloadStatus(1027);
 
+// Import and wait (PREFERRED — blocks, returns paths + bounds)
+return AIT.ImportAndWait(new int[]{48291, 48292}, "Assets/ThirdParty");
+
+// Get bounds for already-imported prefabs
+return AIT.GetBounds(new string[]{"Assets/ThirdParty/path/to/prefab.prefab"});
+
+// Inspect prefab orientation (4-angle contact sheet with gizmos + XYZ axis)
+return AIT.InspectPrefab("Assets/ThirdParty/path/to/prefab.prefab");
+
 // Import files into the project
 return AIT.StartImport(new int[]{48291, 48292}, "Assets/ThirdParty");
 return AIT.GetImportStatus("import_1");
@@ -108,12 +117,16 @@ Wait until state is `"Downloaded"`. Unity downloads the full `.unitypackage` —
 ### 6. Import selected files
 
 ```csharp
-return AIT.StartImport(new int[]{id1, id2, id3}, "Assets/ThirdParty");
-// Poll:
-return AIT.GetImportStatus("import_1");
+return AIT.ImportAndWait(new int[]{id1, id2, id3}, "Assets/ThirdParty");
 ```
 
-Imports only the specified files + their dependencies.
+This blocks until all files are imported and returns their project paths + renderer bounds (width/height/depth). No polling needed. Use the bounds data for placement spacing.
+
+To visually inspect a key asset's orientation:
+```csharp
+return AIT.InspectPrefab("Assets/ThirdParty/path/to/prefab.prefab");
+```
+Returns a 4-angle contact sheet with gizmos and XYZ axis visible. Read the image to understand which direction the asset faces.
 
 ### 7. Verify
 

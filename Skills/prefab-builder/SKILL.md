@@ -24,14 +24,24 @@ Before touching anything, plan:
 
 ### 2. Understand your props
 
-**CRITICAL: Always inspect assets before placing them.**
+**CRITICAL: Always measure bounds and check orientation before placing.**
 
-For each prop, check:
-- **Preview image** — Read the preview file to see what it looks like
-- **AI caption** — what shape, size, and orientation does it have?
-- **Naming conventions** — `SM_` = static mesh, `_01`/`_02` = variants
+**Get bounds for spacing:**
+```csharp
+return AIT.GetBounds(new string[]{
+    "Assets/ThirdParty/.../SM_Bld_Saloon_01.prefab",
+    "Assets/ThirdParty/.../SM_Bld_Jail_01.prefab"
+});
+```
+Returns exact width/height/depth for each prefab. Use these for spacing calculations.
 
-**Lesson learned:** In a previous encampment build, a "log" was placed horizontally but the mesh was actually a vertical tree stump. The LLM assumed the log was lying flat because the name said "log". Always verify orientation from the preview.
+**Inspect orientation with gizmos:**
+```csharp
+return AIT.InspectPrefab("Assets/ThirdParty/.../SM_Bld_Saloon_01.prefab");
+```
+Returns bounds + a 4-angle contact sheet (front/right/back/left) captured from the Scene View with gizmos and XYZ axis visible. Read the contact sheet image to understand which direction the building faces.
+
+**Lesson learned:** In a test building a western town, a Saloon was 3x wider than other buildings but was placed at equal 15m spacing because the LLM had no bounds data. Always use actual dimensions.
 
 ### 3. Create the prefab hierarchy
 
@@ -63,6 +73,22 @@ Camp chair at (0, 0, 2)  — in front
 Crate at (2, 0, -1)     — right-back
 ```
 Offset 2-4m from center. Rotate to face the center point.
+
+**Street layout (using actual bounds):**
+```
+Given: Saloon=12m wide, Jail=4m, Store=8m
+Gap between buildings: 2m
+
+South side (facing +Z):
+  Saloon at X=6 (center, spans 0 to 12)
+  Jail at X=12+2+2=16 (center, spans 14 to 18)
+  Store at X=18+2+4=24 (center, spans 20 to 28)
+
+North side (facing -Z, rotated Y=180):
+  Hotel at X=6, Z=streetWidth+depth
+  Bank at X=16, Z=streetWidth+depth
+```
+Always calculate positions from actual bounds width, never guess spacing.
 
 **Grid (for market stalls, storage areas):**
 ```
