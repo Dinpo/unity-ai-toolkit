@@ -1,6 +1,7 @@
 ---
 name: prefab-builder
 description: Compose imported assets into positioned prefabs using MCP tools. Use when building environment compositions like campsites, market stalls, debris piles, or any arrangement of props.
+user_invocable: true
 ---
 
 # Prefab Builder — Compose Props into Prefabs

@@ -1,6 +1,7 @@
 ---
 name: asset-search
 description: Search, download, and import assets from your Asset Store library via Asset Inventory 4. Use when you need to find props, textures, audio, or other assets across all purchased packages — even ones not yet downloaded or imported.
+user_invocable: true
 ---
 
 # Asset Search — Find and Import Assets from Your Library
