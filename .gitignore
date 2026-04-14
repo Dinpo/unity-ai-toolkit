@@ -1,0 +1,16 @@
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+*.meta
+
+# IDE
+.idea/
+.vs/
+*.csproj
+*.sln
+
+# OS
+.DS_Store
+Thumbs.db

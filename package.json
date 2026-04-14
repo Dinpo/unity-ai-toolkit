@@ -1,0 +1,17 @@
+{
+  "name": "com.dino.ai-toolkit",
+  "version": "0.1.0",
+  "displayName": "AI Toolkit",
+  "description": "LLM-driven asset search, download, import, and prefab composition via Asset Inventory 4.",
+  "unity": "6000.0",
+  "author": {
+    "name": "Dino Patti",
+    "url": "https://github.com/dinpo"
+  },
+  "keywords": [
+    "ai",
+    "asset-inventory",
+    "llm",
+    "mcp"
+  ]
+}

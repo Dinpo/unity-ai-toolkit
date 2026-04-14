@@ -1,0 +1,20 @@
+{
+    "name": "com.dino.ai-toolkit.Editor",
+    "rootNamespace": "AIToolkit",
+    "references": [
+        "AssetInventory.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "ASSET_INVENTORY"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
