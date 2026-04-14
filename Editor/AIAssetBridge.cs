@@ -297,6 +297,74 @@ namespace AIToolkit
             return GetPreviewFilePath(assetFileId) ?? "";
         }
 
+        // ── Bounds ──────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Get renderer bounds for already-imported prefabs. Batch query.
+        /// </summary>
+        public static string GetBounds(string[] prefabPaths)
+        {
+            if (prefabPaths == null || prefabPaths.Length == 0) return "[]";
+
+            var sb = new StringBuilder();
+            sb.Append("[");
+            for (int i = 0; i < prefabPaths.Length; i++)
+            {
+                if (i > 0) sb.Append(",");
+
+                var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(prefabPaths[i]);
+                if (prefab == null)
+                {
+                    sb.Append($"{{\"path\":{JsonStr(prefabPaths[i])},\"error\":\"Prefab not found\"}}");
+                    continue;
+                }
+
+                var instance = Object.Instantiate(prefab, new Vector3(0, -1000, 0), Quaternion.identity);
+                try
+                {
+                    var bounds = GetCombinedBounds(instance);
+                    sb.Append("{");
+                    sb.Append($"\"path\":{JsonStr(prefabPaths[i])},");
+                    sb.Append($"\"bounds\":{BoundsToJson(bounds)}");
+                    sb.Append("}");
+                }
+                finally
+                {
+                    Object.DestroyImmediate(instance);
+                }
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
+        private static Bounds GetCombinedBounds(GameObject go)
+        {
+            var renderers = go.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return new Bounds(Vector3.zero, Vector3.zero);
+
+            var bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++)
+            {
+                bounds.Encapsulate(renderers[i].bounds);
+            }
+            bounds.center -= go.transform.position;
+            return bounds;
+        }
+
+        private static string BoundsToJson(Bounds bounds)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{");
+            sb.Append($"\"width\":{bounds.size.x:F2},");
+            sb.Append($"\"height\":{bounds.size.y:F2},");
+            sb.Append($"\"depth\":{bounds.size.z:F2},");
+            sb.Append($"\"center\":[{bounds.center.x:F2},{bounds.center.y:F2},{bounds.center.z:F2}],");
+            sb.Append($"\"min\":[{bounds.min.x:F2},{bounds.min.y:F2},{bounds.min.z:F2}],");
+            sb.Append($"\"max\":[{bounds.max.x:F2},{bounds.max.y:F2},{bounds.max.z:F2}]");
+            sb.Append("}");
+            return sb.ToString();
+        }
+
         // ── Download ────────────────────────────────────────────────────
 
         private static readonly Dictionary<int, AssetInventory.AssetDownloader> _downloaders =
