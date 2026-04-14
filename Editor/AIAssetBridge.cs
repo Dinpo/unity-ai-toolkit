@@ -141,6 +141,69 @@ namespace AIToolkit
             return GetPreviewFilePath(assetFileId) ?? "";
         }
 
+        // ── Download ────────────────────────────────────────────────────
+
+        private static readonly Dictionary<int, AssetInventory.AssetDownloader> _downloaders =
+            new Dictionary<int, AssetInventory.AssetDownloader>();
+
+        public static string StartDownload(int assetId)
+        {
+            if (!EnsureInitialized()) return "{\"status\":\"error\",\"message\":\"Not initialized\"}";
+
+            var allAssets = AssetInventory.Assets.Load().ToList();
+            var assetInfo = allAssets.FirstOrDefault(a => a.AssetId == assetId);
+            if (assetInfo == null)
+                return $"{{\"status\":\"error\",\"message\":\"Asset {assetId} not found\"}}";
+
+            if (assetInfo.IsDownloaded)
+                return "{\"status\":\"already_downloaded\"}";
+
+            if (string.IsNullOrEmpty(assetInfo.OriginalLocation))
+            {
+                return "{\"status\":\"error\",\"message\":\"Download URL not available. Run Asset Store update in Asset Inventory Settings first.\"}";
+            }
+
+            var downloader = new AssetInventory.AssetDownloader(assetInfo);
+            _downloaders[assetId] = downloader;
+            downloader.Download(true);
+
+            return $"{{\"status\":\"started\",\"assetId\":{assetId}}}";
+        }
+
+        public static string GetDownloadStatus(int assetId)
+        {
+            if (!EnsureInitialized()) return "{\"state\":\"Unknown\"}";
+
+            if (_downloaders.TryGetValue(assetId, out var downloader))
+            {
+                downloader.RefreshState();
+                var state = downloader.GetState();
+
+                var sb = new StringBuilder();
+                sb.Append("{");
+                sb.Append($"\"state\":{JsonStr(state.state.ToString())},");
+                sb.Append($"\"progress\":{state.progress:F3},");
+                sb.Append($"\"bytesDownloaded\":{state.bytesDownloaded},");
+                sb.Append($"\"bytesTotal\":{state.bytesTotal}");
+                sb.Append("}");
+
+                if (state.state == AssetInventory.AssetDownloader.State.Downloaded ||
+                    state.state == AssetInventory.AssetDownloader.State.Unavailable)
+                {
+                    _downloaders.Remove(assetId);
+                }
+
+                return sb.ToString();
+            }
+
+            var allAssets = AssetInventory.Assets.Load().ToList();
+            var assetInfo = allAssets.FirstOrDefault(a => a.AssetId == assetId);
+            if (assetInfo != null && assetInfo.IsDownloaded)
+                return "{\"state\":\"Downloaded\",\"progress\":1.0,\"bytesDownloaded\":0,\"bytesTotal\":0}";
+
+            return "{\"state\":\"Unknown\",\"progress\":0,\"bytesDownloaded\":0,\"bytesTotal\":0}";
+        }
+
         // ── Helpers ─────────────────────────────────────────────────────
 
         private static bool EnsureInitialized()
