@@ -563,6 +563,162 @@ namespace AIToolkit
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Inspect an imported prefab: get bounds + 4-angle contact sheet with gizmos and XYZ axis.
+        /// Temporarily instantiates the prefab, captures from 4 angles via SceneView, destroys it.
+        /// </summary>
+        public static string InspectPrefab(string prefabPath)
+        {
+            if (string.IsNullOrEmpty(prefabPath)) return "{\"error\":\"No prefab path\"}";
+
+            var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null) return $"{{\"error\":\"Prefab not found at {prefabPath}\"}}";
+
+            var instance = Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
+            try
+            {
+                var bounds = GetCombinedBounds(instance);
+                UnityEditor.Selection.activeGameObject = instance;
+
+                var sceneView = UnityEditor.SceneView.lastActiveSceneView;
+                if (sceneView == null)
+                    sceneView = UnityEditor.EditorWindow.GetWindow<UnityEditor.SceneView>();
+
+                if (sceneView == null)
+                    return $"{{\"prefabPath\":{JsonStr(prefabPath)},\"bounds\":{BoundsToJson(bounds)},\"error\":\"No SceneView available\"}}";
+
+                sceneView.drawGizmos = true;
+
+                float distance = Mathf.Max(bounds.size.magnitude * 1.5f, 5f);
+                Vector3 center = bounds.center;
+
+                float[][] angles = new float[][] {
+                    new float[] { 20f, 0f },
+                    new float[] { 20f, 90f },
+                    new float[] { 20f, 180f },
+                    new float[] { 20f, 270f }
+                };
+                string[] labels = new string[] { "front_Z+", "right_X+", "back_Z-", "left_X-" };
+
+                string screenshotDir = System.IO.Path.Combine(Application.dataPath, "Screenshots", "Inspect");
+                System.IO.Directory.CreateDirectory(screenshotDir);
+
+                string prefabName = System.IO.Path.GetFileNameWithoutExtension(prefabPath);
+                var shotPaths = new List<string>();
+
+                for (int i = 0; i < angles.Length; i++)
+                {
+                    float elevation = angles[i][0];
+                    float azimuth = angles[i][1];
+
+                    float elevRad = elevation * Mathf.Deg2Rad;
+                    float azimRad = azimuth * Mathf.Deg2Rad;
+                    Vector3 offset = new Vector3(
+                        Mathf.Sin(azimRad) * Mathf.Cos(elevRad),
+                        Mathf.Sin(elevRad),
+                        Mathf.Cos(azimRad) * Mathf.Cos(elevRad)
+                    ) * distance;
+
+                    Vector3 camPos = center + offset;
+                    Quaternion camRot = Quaternion.LookRotation(center - camPos);
+                    sceneView.LookAt(center, camRot, distance);
+                    sceneView.Repaint();
+
+                    string shotPath = System.IO.Path.Combine(screenshotDir, $"{prefabName}_{labels[i]}.png");
+                    var cam = sceneView.camera;
+                    if (cam != null)
+                    {
+                        int width = 512;
+                        int height = 512;
+                        var rt = new RenderTexture(width, height, 24);
+                        cam.targetTexture = rt;
+                        cam.Render();
+
+                        RenderTexture.active = rt;
+                        var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+                        tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                        tex.Apply();
+
+                        System.IO.File.WriteAllBytes(shotPath, tex.EncodeToPNG());
+                        shotPaths.Add(shotPath);
+
+                        cam.targetTexture = null;
+                        RenderTexture.active = null;
+                        Object.DestroyImmediate(rt);
+                        Object.DestroyImmediate(tex);
+                    }
+                }
+
+                string contactSheetPath = null;
+                if (shotPaths.Count == 4)
+                {
+                    contactSheetPath = System.IO.Path.Combine(screenshotDir, $"{prefabName}_contact.png");
+                    BuildContactSheet(shotPaths.ToArray(), contactSheetPath, 512, 512);
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{");
+                sb.Append($"\"prefabPath\":{JsonStr(prefabPath)},");
+                sb.Append($"\"bounds\":{BoundsToJson(bounds)},");
+                sb.Append($"\"contactSheetPath\":{JsonStr(contactSheetPath)},");
+                sb.Append("\"anglePaths\":[");
+                for (int j = 0; j < shotPaths.Count; j++)
+                {
+                    if (j > 0) sb.Append(",");
+                    sb.Append($"{{\"label\":{JsonStr(labels[j])},\"path\":{JsonStr(shotPaths[j])}}}");
+                }
+                sb.Append("]}");
+                return sb.ToString();
+            }
+            finally
+            {
+                Object.DestroyImmediate(instance);
+            }
+        }
+
+        private static void BuildContactSheet(string[] imagePaths, string outputPath, int tileWidth, int tileHeight)
+        {
+            var sheet = new Texture2D(tileWidth * 2, tileHeight * 2, TextureFormat.RGB24, false);
+
+            var bgPixels = new Color[sheet.width * sheet.height];
+            for (int i = 0; i < bgPixels.Length; i++) bgPixels[i] = new Color(0.15f, 0.15f, 0.15f);
+            sheet.SetPixels(bgPixels);
+
+            int[] xOffsets = { 0, tileWidth, 0, tileWidth };
+            int[] yOffsets = { tileHeight, tileHeight, 0, 0 };
+
+            for (int i = 0; i < imagePaths.Length && i < 4; i++)
+            {
+                byte[] data = System.IO.File.ReadAllBytes(imagePaths[i]);
+                var tile = new Texture2D(2, 2);
+                tile.LoadImage(data);
+
+                if (tile.width != tileWidth || tile.height != tileHeight)
+                {
+                    var resized = new Texture2D(tileWidth, tileHeight, TextureFormat.RGB24, false);
+                    for (int y = 0; y < tileHeight; y++)
+                    {
+                        for (int x = 0; x < tileWidth; x++)
+                        {
+                            float u = (float)x / tileWidth;
+                            float v = (float)y / tileHeight;
+                            resized.SetPixel(x, y, tile.GetPixelBilinear(u, v));
+                        }
+                    }
+                    resized.Apply();
+                    Object.DestroyImmediate(tile);
+                    tile = resized;
+                }
+
+                sheet.SetPixels(xOffsets[i], yOffsets[i], tileWidth, tileHeight, tile.GetPixels());
+                Object.DestroyImmediate(tile);
+            }
+
+            sheet.Apply();
+            System.IO.File.WriteAllBytes(outputPath, sheet.EncodeToPNG());
+            Object.DestroyImmediate(sheet);
+        }
+
         private static async void RunImportAsync(ImportJob job, int[] assetFileIds, string targetFolder)
         {
             try
