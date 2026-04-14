@@ -53,6 +53,50 @@ namespace AIToolkit
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Search for multiple terms at once. Terms are comma-separated.
+        /// Returns JSON object with results grouped by term.
+        /// </summary>
+        public static string SearchMulti(string commaSeparatedTerms, string type = null, int maxPerTerm = 5)
+        {
+            if (!EnsureInitialized()) return "{}";
+            if (string.IsNullOrEmpty(commaSeparatedTerms)) return "{}";
+
+            string[] terms = commaSeparatedTerms.Split(',');
+
+            var options = AssetInventory.AssetSearch.Options.CreateDefault();
+            options.RawSearchType = type;
+
+            var sb = new StringBuilder();
+            sb.Append("{");
+            bool first = true;
+
+            foreach (string rawTerm in terms)
+            {
+                string term = rawTerm.Trim();
+                if (string.IsNullOrEmpty(term)) continue;
+
+                if (!first) sb.Append(",");
+                first = false;
+
+                options.SearchPhrase = term;
+                options.MaxResults = maxPerTerm > 0 ? maxPerTerm : 5;
+                options.CurrentPage = 1;
+
+                AssetInventory.AssetSearch.Result result = AssetInventory.AssetSearch.Execute(options);
+
+                sb.Append($"{JsonStr(term)}:[");
+                for (int i = 0; i < result.Files.Count; i++)
+                {
+                    if (i > 0) sb.Append(",");
+                    sb.Append(FileToJson(result.Files[i], options.AllAssets));
+                }
+                sb.Append("]");
+            }
+            sb.Append("}");
+            return sb.ToString();
+        }
+
         public static string ListPackages(string filter = null)
         {
             if (!EnsureInitialized()) return "[]";
