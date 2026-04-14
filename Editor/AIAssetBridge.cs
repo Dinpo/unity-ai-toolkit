@@ -510,15 +510,21 @@ namespace AIToolkit
                             continue;
                         }
 
+                        // Search within the specific package to reliably find the exact file by ID
                         var searchOpt = AssetInventory.AssetSearch.Options.CreateDefault();
-                        searchOpt.SearchPhrase = assetFile.FileName;
-                        searchOpt.MaxResults = 1;
+                        searchOpt.SearchPhrase = string.Empty;
+                        searchOpt.MaxResults = 5000;
+
+                        int packageIdx = Array.FindIndex(searchOpt.AssetNames,
+                            n => n.IndexOf(parentAsset.GetDisplayName(), StringComparison.OrdinalIgnoreCase) >= 0);
+                        if (packageIdx > 0) searchOpt.SelectedAsset = packageIdx;
+
                         var searchResult = AssetInventory.AssetSearch.Execute(searchOpt);
                         var info = searchResult.Files.FirstOrDefault(f => f.Id == fileId);
 
                         if (info == null)
                         {
-                            job.Errors.Add($"Could not resolve AssetInfo for file {fileId} ({assetFile.FileName})");
+                            job.Errors.Add($"Could not resolve AssetInfo for file {fileId} ({assetFile.FileName}) in package {parentAsset.GetDisplayName()}");
                             continue;
                         }
 
