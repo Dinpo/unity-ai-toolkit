@@ -319,7 +319,7 @@ namespace AIToolkit
                     continue;
                 }
 
-                var instance = Object.Instantiate(prefab, new Vector3(0, -1000, 0), Quaternion.identity);
+                var instance = UnityEngine.Object.Instantiate(prefab, new Vector3(0, -1000, 0), Quaternion.identity);
                 try
                 {
                     var bounds = GetCombinedBounds(instance);
@@ -330,7 +330,7 @@ namespace AIToolkit
                 }
                 finally
                 {
-                    Object.DestroyImmediate(instance);
+                    UnityEngine.Object.DestroyImmediate(instance);
                 }
             }
             sb.Append("]");
@@ -534,7 +534,7 @@ namespace AIToolkit
                 var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (prefab != null)
                 {
-                    var instance = Object.Instantiate(prefab, new Vector3(0, -1000, 0), Quaternion.identity);
+                    var instance = UnityEngine.Object.Instantiate(prefab, new Vector3(0, -1000, 0), Quaternion.identity);
                     try
                     {
                         var bounds = GetCombinedBounds(instance);
@@ -542,7 +542,7 @@ namespace AIToolkit
                     }
                     finally
                     {
-                        Object.DestroyImmediate(instance);
+                        UnityEngine.Object.DestroyImmediate(instance);
                     }
                 }
                 else
@@ -574,7 +574,7 @@ namespace AIToolkit
             var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
             if (prefab == null) return $"{{\"error\":\"Prefab not found at {prefabPath}\"}}";
 
-            var instance = Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
+            var instance = UnityEngine.Object.Instantiate(prefab, Vector3.zero, Quaternion.identity);
             try
             {
                 var bounds = GetCombinedBounds(instance);
@@ -644,8 +644,8 @@ namespace AIToolkit
 
                         cam.targetTexture = null;
                         RenderTexture.active = null;
-                        Object.DestroyImmediate(rt);
-                        Object.DestroyImmediate(tex);
+                        UnityEngine.Object.DestroyImmediate(rt);
+                        UnityEngine.Object.DestroyImmediate(tex);
                     }
                 }
 
@@ -672,7 +672,7 @@ namespace AIToolkit
             }
             finally
             {
-                Object.DestroyImmediate(instance);
+                UnityEngine.Object.DestroyImmediate(instance);
             }
         }
 
@@ -706,17 +706,17 @@ namespace AIToolkit
                         }
                     }
                     resized.Apply();
-                    Object.DestroyImmediate(tile);
+                    UnityEngine.Object.DestroyImmediate(tile);
                     tile = resized;
                 }
 
                 sheet.SetPixels(xOffsets[i], yOffsets[i], tileWidth, tileHeight, tile.GetPixels());
-                Object.DestroyImmediate(tile);
+                UnityEngine.Object.DestroyImmediate(tile);
             }
 
             sheet.Apply();
             System.IO.File.WriteAllBytes(outputPath, sheet.EncodeToPNG());
-            Object.DestroyImmediate(sheet);
+            UnityEngine.Object.DestroyImmediate(sheet);
         }
 
         private static async void RunImportAsync(ImportJob job, int[] assetFileIds, string targetFolder)
