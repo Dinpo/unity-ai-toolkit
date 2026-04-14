@@ -2,7 +2,8 @@
     "name": "com.dino.ai-toolkit.Editor",
     "rootNamespace": "AIToolkit",
     "references": [
-        "GUID:6f5cf4676c89ad64daa709775fe0e85d"
+        "GUID:6f5cf4676c89ad64daa709775fe0e85d",
+        "GUID:e8927d0b827624a32bd8b4c1bdaf49d9"
     ],
     "includePlatforms": [
         "Editor"

@@ -1,7 +1,9 @@
 #if ASSET_INVENTORY
+using System.Diagnostics;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace AIToolkit
 {
@@ -41,17 +43,9 @@ namespace AIToolkit
 
                 if (Directory.Exists(targetPath) || File.Exists(targetPath))
                 {
-                    var info = new DirectoryInfo(targetPath);
-                    if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    if (IsSymlink(targetPath))
                     {
-                        string linkTarget = info.LinkTarget;
-                        if (linkTarget != null && linkTarget.Replace("\\", "/") == skillDir.Replace("\\", "/"))
-                        {
-                            skipped++;
-                            continue;
-                        }
-                        Debug.LogWarning($"AISkillInstaller: '{skillName}' is a symlink to a different location. Skipping.");
-                        warned++;
+                        skipped++;
                         continue;
                     }
 
@@ -60,9 +54,16 @@ namespace AIToolkit
                     continue;
                 }
 
-                Directory.CreateSymbolicLink(targetPath, skillDir);
-                created++;
-                Debug.Log($"AISkillInstaller: Linked '{skillName}' → {skillDir}");
+                if (CreateSymlink(targetPath, skillDir))
+                {
+                    created++;
+                    Debug.Log($"AISkillInstaller: Linked '{skillName}' -> {skillDir}");
+                }
+                else
+                {
+                    warned++;
+                    Debug.LogError($"AISkillInstaller: Failed to create symlink for '{skillName}'");
+                }
             }
 
             Debug.Log($"AISkillInstaller: Done. Created: {created}, Skipped: {skipped}, Warnings: {warned}");
@@ -86,21 +87,19 @@ namespace AIToolkit
                 return;
             }
 
-            string skillsSource = Path.Combine(packagePath, SKILLS_SUBFOLDER);
             string[] entries = Directory.GetDirectories(targetRoot);
             int removed = 0;
 
             foreach (string entry in entries)
             {
-                var info = new DirectoryInfo(entry);
-                if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                if (!IsSymlink(entry)) continue;
 
-                string linkTarget = info.LinkTarget;
-                if (linkTarget != null && linkTarget.Replace("\\", "/").StartsWith(skillsSource.Replace("\\", "/")))
+                string linkTarget = ReadSymlinkTarget(entry);
+                if (linkTarget != null && linkTarget.Contains(packagePath))
                 {
-                    info.Delete();
+                    Directory.Delete(entry, false);
                     removed++;
-                    Debug.Log($"AISkillInstaller: Removed symlink '{info.Name}'");
+                    Debug.Log($"AISkillInstaller: Removed symlink '{Path.GetFileName(entry)}'");
                 }
             }
 
@@ -112,6 +111,51 @@ namespace AIToolkit
             var assembly = typeof(AISkillInstaller).Assembly;
             var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForAssembly(assembly);
             return packageInfo?.resolvedPath;
+        }
+
+        private static bool IsSymlink(string path)
+        {
+            return new FileInfo(path).Attributes.HasFlag(FileAttributes.ReparsePoint);
+        }
+
+        private static bool CreateSymlink(string linkPath, string targetPath)
+        {
+#if UNITY_EDITOR_WIN
+            var psi = new ProcessStartInfo("cmd.exe", $"/c mklink /D \"{linkPath}\" \"{targetPath}\"")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardError = true
+            };
+#else
+            var psi = new ProcessStartInfo("ln", $"-s \"{targetPath}\" \"{linkPath}\"")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardError = true
+            };
+#endif
+            var process = Process.Start(psi);
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+
+        private static string ReadSymlinkTarget(string path)
+        {
+#if UNITY_EDITOR_WIN
+            return null;
+#else
+            var psi = new ProcessStartInfo("readlink", path)
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true
+            };
+            var process = Process.Start(psi);
+            string output = process.StandardOutput.ReadToEnd().Trim();
+            process.WaitForExit();
+            return process.ExitCode == 0 ? output : null;
+#endif
         }
     }
 }

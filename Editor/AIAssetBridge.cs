@@ -25,23 +25,13 @@ namespace AIToolkit
         {
             if (!EnsureInitialized()) return "[]";
 
-            var options = new AssetInventory.AssetSearch.Options
-            {
-                SearchPhrase = query ?? string.Empty,
-                MaxResults = maxResults > 0 ? maxResults : 20,
-                CurrentPage = 1,
-                RawSearchType = type
-            };
-
-            var allAssets = AssetInventory.Assets.Load().ToList();
-            options.AllAssets = allAssets;
-
-            var tags = AssetInventory.DBAdapter.DB.Table<AssetInventory.Tag>().ToList();
-            options.Tags = tags;
-            options.TagNames = AssetInventory.Assets.ExtractTagNames(tags);
-            options.PublisherNames = AssetInventory.Assets.ExtractPublisherNames(allAssets);
-            options.CategoryNames = AssetInventory.Assets.ExtractCategoryNames(allAssets);
-            options.AssetNames = AssetInventory.Assets.ExtractAssetNames(allAssets, true);
+            // CreateDefault() loads all reference data (tags, publishers, categories, asset names)
+            // using internal methods we can't call directly from an external assembly
+            var options = AssetInventory.AssetSearch.Options.CreateDefault();
+            options.SearchPhrase = query ?? string.Empty;
+            options.MaxResults = maxResults > 0 ? maxResults : 20;
+            options.CurrentPage = 1;
+            options.RawSearchType = type;
 
             if (!string.IsNullOrEmpty(packageFilter))
             {
@@ -57,7 +47,7 @@ namespace AIToolkit
             for (int i = 0; i < result.Files.Count; i++)
             {
                 if (i > 0) sb.Append(",");
-                sb.Append(FileToJson(result.Files[i], allAssets));
+                sb.Append(FileToJson(result.Files[i], options.AllAssets));
             }
             sb.Append("]");
             return sb.ToString();
@@ -286,17 +276,9 @@ namespace AIToolkit
                             continue;
                         }
 
-                        var searchOpt = new AssetInventory.AssetSearch.Options
-                        {
-                            SearchPhrase = assetFile.FileName,
-                            MaxResults = 1,
-                            AllAssets = allAssets,
-                            Tags = new List<AssetInventory.Tag>(),
-                            TagNames = Array.Empty<string>(),
-                            PublisherNames = Array.Empty<string>(),
-                            CategoryNames = Array.Empty<string>(),
-                            AssetNames = Array.Empty<string>()
-                        };
+                        var searchOpt = AssetInventory.AssetSearch.Options.CreateDefault();
+                        searchOpt.SearchPhrase = assetFile.FileName;
+                        searchOpt.MaxResults = 1;
                         var searchResult = AssetInventory.AssetSearch.Execute(searchOpt);
                         var info = searchResult.Files.FirstOrDefault(f => f.Id == fileId);
 
