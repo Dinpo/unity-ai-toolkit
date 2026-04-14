@@ -106,7 +106,9 @@ namespace AIToolkit
 
             var options = AssetInventory.AssetSearch.Options.CreateDefault();
             options.SearchPhrase = string.Empty;
-            options.MaxResults = maxResults > 0 ? maxResults : 50;
+            // Use high internal limit when path filtering, since filtering happens post-search
+            int internalLimit = !string.IsNullOrEmpty(pathFilter) ? 1000 : (maxResults > 0 ? maxResults : 50);
+            options.MaxResults = internalLimit;
             options.CurrentPage = 1;
             options.RawSearchType = type;
 
@@ -127,7 +129,8 @@ namespace AIToolkit
                     f.Path != null && f.Path.IndexOf(pathFilter, StringComparison.OrdinalIgnoreCase) >= 0);
             }
 
-            var fileList = files.ToList();
+            int limit = maxResults > 0 ? maxResults : 50;
+            var fileList = files.Take(limit).ToList();
             var sb = new StringBuilder();
             sb.Append("[");
             for (int i = 0; i < fileList.Count; i++)
