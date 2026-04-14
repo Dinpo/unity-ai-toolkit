@@ -204,6 +204,136 @@ namespace AIToolkit
             return "{\"state\":\"Unknown\",\"progress\":0,\"bytesDownloaded\":0,\"bytesTotal\":0}";
         }
 
+        // ── Import ──────────────────────────────────────────────────────
+
+        private static int _nextJobId;
+
+        private sealed class ImportJob
+        {
+            public string Id;
+            public string State; // "InProgress", "Done", "Failed"
+            public List<string> ImportedFiles = new List<string>();
+            public List<string> Errors = new List<string>();
+        }
+
+        private static readonly Dictionary<string, ImportJob> _importJobs =
+            new Dictionary<string, ImportJob>();
+
+        public static string StartImport(int[] assetFileIds, string targetFolder = "Assets/ThirdParty")
+        {
+            if (!EnsureInitialized()) return "{\"error\":\"Not initialized\"}";
+            if (assetFileIds == null || assetFileIds.Length == 0)
+                return "{\"error\":\"No file IDs provided\"}";
+
+            string jobId = $"import_{++_nextJobId}";
+            var job = new ImportJob { Id = jobId, State = "InProgress" };
+            _importJobs[jobId] = job;
+
+            RunImportAsync(job, assetFileIds, targetFolder);
+
+            return $"{{\"jobId\":{JsonStr(jobId)}}}";
+        }
+
+        public static string GetImportStatus(string jobId)
+        {
+            if (!_importJobs.TryGetValue(jobId, out var job))
+                return "{\"state\":\"Unknown\",\"error\":\"Job not found\"}";
+
+            var sb = new StringBuilder();
+            sb.Append("{");
+            sb.Append($"\"state\":{JsonStr(job.State)},");
+            sb.Append("\"importedFiles\":[");
+            for (int i = 0; i < job.ImportedFiles.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(JsonStr(job.ImportedFiles[i]));
+            }
+            sb.Append("],\"errors\":[");
+            for (int i = 0; i < job.Errors.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(JsonStr(job.Errors[i]));
+            }
+            sb.Append("]}");
+
+            if (job.State == "Done" || job.State == "Failed")
+                _importJobs.Remove(jobId);
+
+            return sb.ToString();
+        }
+
+        private static async void RunImportAsync(ImportJob job, int[] assetFileIds, string targetFolder)
+        {
+            try
+            {
+                var allAssets = AssetInventory.Assets.Load().ToList();
+
+                foreach (int fileId in assetFileIds)
+                {
+                    try
+                    {
+                        var assetFile = AssetInventory.DBAdapter.DB.Find<AssetInventory.AssetFile>(fileId);
+                        if (assetFile == null)
+                        {
+                            job.Errors.Add($"File {fileId} not found in database");
+                            continue;
+                        }
+
+                        var parentAsset = allAssets.FirstOrDefault(a => a.AssetId == assetFile.AssetId);
+                        if (parentAsset == null)
+                        {
+                            job.Errors.Add($"Parent asset for file {fileId} not found");
+                            continue;
+                        }
+
+                        var searchOpt = new AssetInventory.AssetSearch.Options
+                        {
+                            SearchPhrase = assetFile.FileName,
+                            MaxResults = 1,
+                            AllAssets = allAssets,
+                            Tags = new List<AssetInventory.Tag>(),
+                            TagNames = Array.Empty<string>(),
+                            PublisherNames = Array.Empty<string>(),
+                            CategoryNames = Array.Empty<string>(),
+                            AssetNames = Array.Empty<string>()
+                        };
+                        var searchResult = AssetInventory.AssetSearch.Execute(searchOpt);
+                        var info = searchResult.Files.FirstOrDefault(f => f.Id == fileId);
+
+                        if (info == null)
+                        {
+                            job.Errors.Add($"Could not resolve AssetInfo for file {fileId} ({assetFile.FileName})");
+                            continue;
+                        }
+
+                        string resultPath = await AssetInventory.Assets.CopyTo(
+                            info, targetFolder, withDependencies: true);
+
+                        if (!string.IsNullOrEmpty(resultPath))
+                        {
+                            job.ImportedFiles.Add(resultPath);
+                        }
+                        else
+                        {
+                            job.Errors.Add($"Import returned no path for {assetFile.FileName}");
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        job.Errors.Add($"Error importing file {fileId}: {e.Message}");
+                    }
+                }
+
+                job.State = job.Errors.Count > 0 && job.ImportedFiles.Count == 0 ? "Failed" : "Done";
+            }
+            catch (Exception e)
+            {
+                job.State = "Failed";
+                job.Errors.Add($"Import job failed: {e.Message}");
+                Debug.LogError($"AIAssetBridge import job failed: {e}");
+            }
+        }
+
         // ── Helpers ─────────────────────────────────────────────────────
 
         private static bool EnsureInitialized()
