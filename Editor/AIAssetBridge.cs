@@ -97,6 +97,125 @@ namespace AIToolkit
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Browse files inside a specific package, optionally filtered by path and type.
+        /// </summary>
+        public static string BrowsePackage(int assetId, string pathFilter = null, string type = null, int maxResults = 50)
+        {
+            if (!EnsureInitialized()) return "[]";
+
+            var options = AssetInventory.AssetSearch.Options.CreateDefault();
+            options.SearchPhrase = string.Empty;
+            options.MaxResults = maxResults > 0 ? maxResults : 50;
+            options.CurrentPage = 1;
+            options.RawSearchType = type;
+
+            var targetAsset = options.AllAssets.FirstOrDefault(a => a.AssetId == assetId);
+            if (targetAsset == null) return "{\"error\":\"Package not found\"}";
+
+            int packageIdx = Array.FindIndex(options.AssetNames,
+                n => n.IndexOf(targetAsset.GetDisplayName(), StringComparison.OrdinalIgnoreCase) >= 0);
+            if (packageIdx <= 0) return "{\"error\":\"Package not found in filter list\"}";
+            options.SelectedAsset = packageIdx;
+
+            AssetInventory.AssetSearch.Result result = AssetInventory.AssetSearch.Execute(options);
+
+            var files = result.Files.AsEnumerable();
+            if (!string.IsNullOrEmpty(pathFilter))
+            {
+                files = files.Where(f =>
+                    f.Path != null && f.Path.IndexOf(pathFilter, StringComparison.OrdinalIgnoreCase) >= 0);
+            }
+
+            var fileList = files.ToList();
+            var sb = new StringBuilder();
+            sb.Append("[");
+            for (int i = 0; i < fileList.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(FileToJson(fileList[i], options.AllAssets));
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Get a compact summary of search results grouped by package.
+        /// </summary>
+        public static string SearchSummary(string query, string type = null)
+        {
+            if (!EnsureInitialized()) return "{}";
+
+            var options = AssetInventory.AssetSearch.Options.CreateDefault();
+            options.SearchPhrase = query ?? string.Empty;
+            options.MaxResults = 1000;
+            options.CurrentPage = 1;
+            options.RawSearchType = type;
+
+            AssetInventory.AssetSearch.Result result = AssetInventory.AssetSearch.Execute(options);
+
+            var groups = new Dictionary<int, PackageSummary>();
+            foreach (var file in result.Files)
+            {
+                if (!groups.TryGetValue(file.AssetId, out var summary))
+                {
+                    var parent = options.AllAssets.FirstOrDefault(a => a.AssetId == file.AssetId);
+                    summary = new PackageSummary
+                    {
+                        Name = parent?.DisplayName ?? file.GetDisplayName(),
+                        Publisher = parent?.DisplayPublisher,
+                        AssetId = file.AssetId,
+                        IsDownloaded = parent?.IsDownloaded ?? false,
+                        Count = 0
+                    };
+                    groups[file.AssetId] = summary;
+                }
+                summary.Count++;
+            }
+
+            int downloadedCount = 0;
+            int notDownloadedCount = 0;
+            foreach (var g in groups.Values)
+            {
+                if (g.IsDownloaded) downloadedCount += g.Count;
+                else notDownloadedCount += g.Count;
+            }
+
+            var sorted = groups.Values.OrderByDescending(g => g.Count).ToList();
+
+            var sb = new StringBuilder();
+            sb.Append("{");
+            sb.Append($"\"query\":{JsonStr(query)},");
+            sb.Append($"\"totalResults\":{result.ResultCount},");
+            sb.Append("\"packages\":[");
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var g = sorted[i];
+                sb.Append("{");
+                sb.Append($"\"name\":{JsonStr(g.Name)},");
+                sb.Append($"\"publisher\":{JsonStr(g.Publisher)},");
+                sb.Append($"\"count\":{g.Count},");
+                sb.Append($"\"isDownloaded\":{Bool(g.IsDownloaded)},");
+                sb.Append($"\"assetId\":{g.AssetId}");
+                sb.Append("}");
+            }
+            sb.Append("],");
+            sb.Append($"\"downloadedResults\":{downloadedCount},");
+            sb.Append($"\"notDownloadedResults\":{notDownloadedCount}");
+            sb.Append("}");
+            return sb.ToString();
+        }
+
+        private class PackageSummary
+        {
+            public string Name;
+            public string Publisher;
+            public int AssetId;
+            public bool IsDownloaded;
+            public int Count;
+        }
+
         public static string ListPackages(string filter = null)
         {
             if (!EnsureInitialized()) return "[]";
