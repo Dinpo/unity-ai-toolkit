@@ -486,6 +486,83 @@ namespace AIToolkit
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Synchronous import that blocks until done, returning paths + bounds.
+        /// Prefer this over StartImport + polling when called from execute_code.
+        /// </summary>
+        public static string ImportAndWait(int[] assetFileIds, string targetFolder = "Assets/ThirdParty")
+        {
+            if (!EnsureInitialized()) return "{\"imported\":[],\"errors\":[\"Not initialized\"]}";
+            if (assetFileIds == null || assetFileIds.Length == 0)
+                return "{\"imported\":[],\"errors\":[\"No file IDs provided\"]}";
+
+            string jobId = $"import_{++_nextJobId}";
+            var job = new ImportJob { Id = jobId, State = "InProgress" };
+            _importJobs[jobId] = job;
+
+            RunImportAsync(job, assetFileIds, targetFolder);
+
+            // Spin-wait for completion (acceptable in editor code from execute_code)
+            int timeoutMs = 60000 * assetFileIds.Length;
+            int elapsed = 0;
+            while (job.State == "InProgress" && elapsed < timeoutMs)
+            {
+                System.Threading.Thread.Sleep(200);
+                elapsed += 200;
+            }
+
+            if (job.State == "InProgress")
+            {
+                job.State = "Failed";
+                job.Errors.Add("Import timed out");
+            }
+
+            UnityEditor.AssetDatabase.Refresh(UnityEditor.ImportAssetOptions.ForceSynchronousImport);
+
+            // Measure bounds for each imported prefab
+            var sb = new StringBuilder();
+            sb.Append("{\"imported\":[");
+            for (int i = 0; i < job.ImportedFiles.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                string path = job.ImportedFiles[i];
+
+                sb.Append("{");
+                sb.Append($"\"assetFileId\":{(i < assetFileIds.Length ? assetFileIds[i] : 0)},");
+                sb.Append($"\"path\":{JsonStr(path)},");
+
+                var prefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab != null)
+                {
+                    var instance = Object.Instantiate(prefab, new Vector3(0, -1000, 0), Quaternion.identity);
+                    try
+                    {
+                        var bounds = GetCombinedBounds(instance);
+                        sb.Append($"\"bounds\":{BoundsToJson(bounds)}");
+                    }
+                    finally
+                    {
+                        Object.DestroyImmediate(instance);
+                    }
+                }
+                else
+                {
+                    sb.Append("\"bounds\":null");
+                }
+                sb.Append("}");
+            }
+            sb.Append("],\"errors\":[");
+            for (int i = 0; i < job.Errors.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(JsonStr(job.Errors[i]));
+            }
+            sb.Append("]}");
+
+            _importJobs.Remove(jobId);
+            return sb.ToString();
+        }
+
         private static async void RunImportAsync(ImportJob job, int[] assetFileIds, string targetFolder)
         {
             try
